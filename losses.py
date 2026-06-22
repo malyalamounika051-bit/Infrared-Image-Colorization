@@ -9,21 +9,26 @@ class VGGPerceptualLoss(nn.Module):
     """
     def __init__(self):
         super(VGGPerceptualLoss, self).__init__()
-        # Load VGG16 weights
-        vgg = vgg16(weights=VGG16_Weights.DEFAULT)
-        # We only need the features part, and we freeze it
-        vgg_features = vgg.features.eval()
-        for param in vgg_features.parameters():
-            param.requires_grad = False
+        self.enabled = True
+        try:
+            # Load VGG16 weights
+            vgg = vgg16(weights=VGG16_Weights.DEFAULT)
+            # We only need the features part, and we freeze it
+            vgg_features = vgg.features.eval()
+            for param in vgg_features.parameters():
+                param.requires_grad = False
+                
+            self.slice1 = nn.Sequential(*vgg_features[:4])   # relu1_2
+            self.slice2 = nn.Sequential(*vgg_features[4:9])  # relu2_2
+            self.slice3 = nn.Sequential(*vgg_features[9:16]) # relu3_3
+            self.slice4 = nn.Sequential(*vgg_features[16:23]) # relu4_3
             
-        self.slice1 = nn.Sequential(*vgg_features[:4])   # relu1_2
-        self.slice2 = nn.Sequential(*vgg_features[4:9])  # relu2_2
-        self.slice3 = nn.Sequential(*vgg_features[9:16]) # relu3_3
-        self.slice4 = nn.Sequential(*vgg_features[16:23]) # relu4_3
-        
-        # Mean and std normalization for VGG input (expecting range [0, 1])
-        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
-        self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+            # Mean and std normalization for VGG input (expecting range [0, 1])
+            self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+            self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+        except Exception as e:
+            print(f"Warning: Could not load pretrained VGG-16 for perceptual loss ({e}). Perceptual loss is disabled.")
+            self.enabled = False
 
     def _normalize(self, x):
         # Convert from [-1, 1] to [0, 1] before normalizing
@@ -31,6 +36,9 @@ class VGGPerceptualLoss(nn.Module):
         return (x - self.mean) / self.std
 
     def forward(self, x, y):
+        if not self.enabled:
+            return torch.tensor(0.0, device=x.device, requires_grad=True)
+            
         x = self._normalize(x)
         y = self._normalize(y)
         

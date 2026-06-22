@@ -55,6 +55,26 @@ class Up(nn.Module):
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
+class UpFusion(nn.Module):
+    """Upscaling then double conv for feature fusion with custom channels"""
+    def __init__(self, in_channels, skip_channels, out_channels, bilinear=False):
+        super().__init__()
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.conv = DoubleConv(in_channels + skip_channels, out_channels)
+        else:
+            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+            self.conv = DoubleConv(in_channels // 2 + skip_channels, out_channels)
+
+    def forward(self, x1, x2):
+        x1 = self.up(x1)
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+        x1 = nn.functional.pad(x1, [diffX // 2, diffX - diffX // 2,
+                                    diffY // 2, diffY - diffY // 2])
+        x = torch.cat([x2, x1], dim=1)
+        return self.conv(x)
+
 class DualBranchUNet(nn.Module):
     """
     Dual-Branch Generator:
@@ -90,17 +110,14 @@ class DualBranchUNet(nn.Module):
         # -------------------------------------------------------------
         # Colorization Decoder (RGB Reconstruction with Feature Fusion)
         # -------------------------------------------------------------
-        # For the colorization decoder, at each scale, we concatenate:
-        # 1. The upsampled feature map.
-        # 2. The encoder skip connection.
-        # 3. The corresponding feature map from the enhancement branch decoder (Feature Fusion!)
-        # Thus, in_channels for colorization decoder blocks:
-        # color_up1 takes: upsampled (512) + encoder skip (512) + enhancement features (512) = 1536 channels -> outputs 256
-        # To keep it standard and clean, we will concatenate the features.
-        self.col_up1 = Up(1024 + 512, 512 // factor, bilinear) # taking input from bottleneck (1024), enc3 (512), and enh_up1 output (512)
-        self.col_up2 = Up(512 + 256, 256 // factor, bilinear)  # taking input from col_up1 (512), enc2 (256), and enh_up2 output (256)
-        self.col_up3 = Up(256 + 128, 128 // factor, bilinear)  # taking input from col_up2 (256), enc1 (128), and enh_up3 (128)
-        self.col_up4 = Up(128 + 64, 64, bilinear)               # taking input from col_up3 (128), inc (64), and enh_up4 (64)
+        # col_up1 takes: upsampled bottleneck (1024 -> 512) + fused skip connection (512 enc3 + 512 enh_up1 = 1024 channels)
+        self.col_up1 = UpFusion(1024 // factor, 512 + 512 // factor, 512 // factor, bilinear)
+        # col_up2 takes: upsampled col_up1 (512 -> 256) + fused skip connection (256 enc2 + 256 enh_up2 = 512 channels)
+        self.col_up2 = UpFusion(512 // factor, 256 + 256 // factor, 256 // factor, bilinear)
+        # col_up3 takes: upsampled col_up2 (256 -> 128) + fused skip connection (128 enc1 + 128 enh_up3 = 256 channels)
+        self.col_up3 = UpFusion(256 // factor, 128 + 128 // factor, 128 // factor, bilinear)
+        # col_up4 takes: upsampled col_up3 (128 -> 64) + fused skip connection (64 inc + 64 enh_up4 = 128 channels)
+        self.col_up4 = UpFusion(128 // factor, 64 + 64, 64, bilinear)
         
         self.col_outc = nn.Sequential(
             nn.Conv2d(64, 3, kernel_size=1),

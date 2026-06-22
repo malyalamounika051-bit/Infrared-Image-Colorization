@@ -78,7 +78,8 @@ def generate_synthetic_data(save_dir, num_images=150, image_size=(256, 256)):
                 vy = int(pt1[1] * (1 - t) + pt2[1] * t)
                 if 5 < vx < w - 5 and 5 < vy < h - 5:
                     # Vehicle in RGB (red, yellow, white, etc.)
-                    color = np.random.choice([(200, 20, 20), (220, 220, 0), (200, 200, 200)])
+                    colors = [(200, 20, 20), (220, 220, 0), (200, 200, 200)]
+                    color = colors[np.random.randint(len(colors))]
                     cv2.rectangle(rgb, (vx - 2, vy - 2), (vx + 2, vy + 2), color, -1)
                     # Vehicle in IR: engine is very hot (bright white spot)
                     cv2.rectangle(ir, (vx - 2, vy - 2), (vx + 2, vy + 2), np.random.randint(230, 255), -1)
@@ -93,11 +94,11 @@ def generate_synthetic_data(save_dir, num_images=150, image_size=(256, 256)):
             cv2.rectangle(rgb, (bx, by), (bx + bw, by + bh), b_color, -1)
             # IR buildings (typically warm concrete)
             ir_val = np.random.randint(120, 160)
-            cv2.rectangle(ir, (bx, by), (bx + bw, by + bh), ir_val, -1)
+            cv2.rectangle(ir, (bx, by), (bx + bw, by + bh), int(ir_val), -1)
             # Add roof details
             if np.random.rand() > 0.5:
                 cv2.rectangle(rgb, (bx + 3, by + 3), (bx + bw - 3, by + bh - 3), (b_color[0]+20, b_color[1]+20, b_color[2]+20), -1)
-                cv2.rectangle(ir, (bx + 3, by + 3), (bx + bw - 3, by + bh - 3), ir_val + np.random.choice([-15, 15]), -1)
+                cv2.rectangle(ir, (bx + 3, by + 3), (bx + bw - 3, by + bh - 3), int(ir_val + np.random.choice([-15, 15])), -1)
 
         # Add sensor noise / blur to IR to make colorization realistic/challenging
         noise = np.random.normal(0, np.random.uniform(2, 6), ir.shape).astype(np.int16)
