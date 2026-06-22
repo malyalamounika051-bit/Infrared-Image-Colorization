@@ -129,7 +129,7 @@ def main():
     # 3. Loss & Optimizers
     criterionGAN = GANLoss(use_lsgan=True).to(args.device)
     criterionL1 = nn.L1Loss().to(args.device)
-    criterionPerceptual = VGGPerceptualLoss().to(args.device)
+    criterionPerceptual = VGGPerceptualLoss().to(args.device) if args.lambda_percep > 0.0 else None
 
     optimizerG = torch.optim.Adam(netG.parameters(), lr=args.lr, betas=(0.5, 0.999))
     optimizerD = torch.optim.Adam(netD.parameters(), lr=args.lr, betas=(0.5, 0.999))
@@ -201,7 +201,7 @@ def main():
             loss_G_L1 = loss_G_L1_enh + loss_G_L1_col
             
             # Perceptual Loss
-            loss_G_percep = criterionPerceptual(col_fake, rgb_real)
+            loss_G_percep = criterionPerceptual(col_fake, rgb_real) if criterionPerceptual is not None else torch.tensor(0.0, device=args.device)
             
             # Total G loss
             loss_G = loss_G_GAN + (args.lambda_recon * loss_G_L1) + (args.lambda_percep * loss_G_percep)
